@@ -3,10 +3,12 @@
 <head>
     <title>GPX Visualizer</title>
     <meta charset="utf-8">
-    <script src="https://cdn.jsdelivr.net/npm/brython@3.11.0/brython.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/brython@3.11.0/brython_stdlib.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/brython@3/brython.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/brython@3/brython_stdlib.min.js"></script>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/maptalks/dist/maptalks.min.css" />
     <script src="https://cdn.jsdelivr.net/npm/maptalks/dist/maptalks.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/aframe@1.6/dist/aframe-master.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/haversine@1.1/haversine.min.js"></script>
     <style>
         html, body, div, span {
             margin: 0px;
@@ -17,35 +19,17 @@
             display: flex;
             flex-direction: column;
         }
-        #map {
+        #map, #view {
             flex: 1;
         }
-        p:not(.maptalks-layer-switcher, .maptalks-layer-switcher *), input:not(.maptalks-layer-switcher, .maptalks-layer-switcher *) {
-            display: inline;
-            font-family: Arial, sans-serif;
-            font-size: 20px;
-            margin: 5px;
-            padding: 5px;
-            border-radius: 0px;
-            text-decoration: none;
-            font-weight: normal;
-            background-color: #f8f8f8;
-            color: black;
-            -webkit-appearance: none;
-            border: 1px solid black;
-        }
-        h2 {
+        p:not(.maptalks-layer-switcher, .maptalks-layer-switcher *) {
             font-family: Arial, sans-serif;
             font-size: 28px;
+            margin: 5px;
+            padding: 5px 7px;
             text-decoration: none;
             font-weight: normal;
-            margin: 20px;
-        }
-        h1 {
-            font-family: Arial, sans-serif;
-            font-size: 36px;
-            font-weight: bold;
-            margin: 0px 20px 20px;
+            color: black;
         }
     </style>
 </head>
@@ -53,26 +37,15 @@
     <noscript>
         <p>JavaScript is required to use this website.</p>
     </noscript>
-    <script type="importmap">
-    {
-        "imports": {
-            "three": "https://cdn.jsdelivr.net/npm/three@0/build/three.module.js",
-            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0/examples/jsm/"
-        }
-    }
-    </script>
-    <script type="module">
-        import * as THREE from 'three';
-        window.THREE = THREE;
-    </script>
     <script type = "text/python">
         from browser import document, ajax, html, window, timer
         from hashlib import sha256
+        import random
 
+        document ["map"].style.display = "none"
+        focus = "view"
         mt = window.maptalks
-        three = window.THREE
-
-        """ Map = mt.Map.new ("map", {
+        Map = mt.Map.new ("map", {
             "center": [0, 0],
             "zoom": 2,
             "maxZoom": 19,
@@ -114,12 +87,24 @@
                     "subdomains": ["a", "b", "c", "d"],
                     "maxZoom": 22
                 })
-            ])
+            ]),
+            "layers": [mt.VectorLayer.new ("Vector")]
         })
-        gpx_layer = mt.VectorLayer.new ("GPX Track", None).addTo (Map)
-        preview = None
+
+        global guess, answer, in_game, start_time
+        guess = mt.Marker.new ([0, 0], {
+            "symbol": {
+                "markerType": "pin",
+                "markerFill": "red",
+                "markerLineColor": "black",
+                "markerLineWidth": 4,
+                "markerWidth": 50,
+                "markerHeight": 50
+            }
+        }).addTo (Map.getLayer ("Vector"))
 
         def interactive (toggle):
+            global in_game
             Map.setOptions ({
                 "draggable": toggle,
                 "dragPan": toggle,
@@ -129,66 +114,8 @@
                 "touchZoom": toggle,
                 "doubleClickZoom": toggle
             })
-
-        def load_gpx (ev):
-            if not document ["gpx"].files:
-                return
-            reader = window.FileReader.new ()
-            reader.bind ("load", lambda ev: process_gpx (ev.target.result))
-            reader.readAsText (document ["gpx"].files [0])
-
-        def process_gpx (gpx_file):
-            global preview, gpx_layer, Map
-            gpx = window.gpxParser.new ()
-            gpx.parse (gpx_file)
-            if len (gpx.tracks) == 0:
-                window.alert ("No tracks found in the GPX file.")
-                document ["gpx"].value = ""
-            elif len (gpx.tracks) > 1:
-                window.alert ("Multiple tracks found in the GPX file. Only the first track will be displayed.")
-
-            preview = mt.LineString.new (tuple ((i.lon, i.lat) for i in gpx.tracks [0].points), {
-                "visible": True,
-                "editable": False,
-                "draggable": False,
-                "interactive": False,
-                "symbol": {
-                    "lineColor": "#0000FF",
-                    "lineWidth": 5
-                }
-            })
-
-            interactive (False)
-            temp = dict (Map.getView ())
-            preview.addTo (gpx_layer, True)
-            preview_view = dict (Map.getView ())
-            Map.setView (temp)
-            gpx_layer.clear ()
-            zoomout = 0
-            if temp ["zoom"] > 2:
-                zoomout = 1500
-                temp.update ({"zoom": 2})
-                Map.animateTo (temp, {"duration": 1500, "easing": "inAndOut"})
-            temp.update ({"center": preview_view ["center"]})
-            timer.set_timeout (lambda: Map.animateTo (temp, {"duration": 1000, "easing": "inAndOut"}), zoomout)
-            timer.set_timeout (lambda: Map.animateTo (preview_view, {"duration": 1500, "easing": "inAndOut"}), 1000 + zoomout)
-            timer.set_timeout (lambda: interactive (True), 2500 + zoomout)
-            timer.set_timeout (lambda: preview.addTo (gpx_layer, True), 2500 + zoomout)
-
-        document ["gpx"].bind ("change", load_gpx)
-
-        def animate (ev):
-            global preview
-            interactive (False)
-            if preview is None:
-                window.alert ("No GPX file loaded.")
-                return
-            preview.remove ()
-
-            preview.addTo (gpx_layer, True)
-            interactive (True)
-        
-        document ["animate"].bind ("click", animate) """
+            in_game = toggle
+        interactive (False)
 
         def binhash ():
             global seed
@@ -196,9 +123,11 @@
             h = format (int (h, 16), "0>256b") # 256-bit binary string
             return h
 
-        def req_location ():
+        def req_location (s = None):
             global seed, h
+            seed = s if s is not None else format (random.randint (0, 16 ** 32 - 1), "0>16x")
             h = binhash ()
+            document ["info"].text = "Finding a random location..."
 
             south, west = 5.625 * int (h [ : 5], 2) - 90, 5.625 * int (h [5 : 11], 2) - 180
             north, east = south + 5.625, west + 5.625
@@ -212,51 +141,190 @@
 
                 def comp1 (resp):
                     global seed, h
-                    while int (h [11 : 21], 2) + 1 > len (resp.json):
+                    from math import log, ceil
+                    bits = lambda start, resp: int (h [start : start + ceil (log (len (resp.json), 2))], 2) + 1 # Use just enough bits for the index
+                    while bits (11, resp) > len (resp.json):
                         seed += " "
                         h = binhash ()
-                    resp = resp.json [int (h [11 : 21], 2) + 1]
+                    resp = resp.json [bits (11, resp)]
                     north, south, east, west = resp ["la"] + 0.01, resp ["la"] - 0.01, resp ["lo"] + 0.01, resp ["lo"] - 0.01
 
                     def comp2 (resp):
                         global seed, h
-                        while int (h [31 : 41], 2) + 1 > len (resp.json):
+                        while bits (31, resp) > len (resp.json):
                             seed += " "
                             h = binhash ()
-                        streetside (resp.json [int (h [31 : 41], 2) + 1])
+                        streetside (resp.json [bits (31, resp)])
 
                     ajax.get (f"https://t.ssl.ak.tiles.virtualearth.net/tiles/cmd/StreetSideBubbleMetaData?count=2147483647&north={north}&south={south}&east={east}&west={west}", oncomplete = comp2, cache = True)
                 ajax.get (f"https://t.ssl.ak.tiles.virtualearth.net/tiles/cmd/StreetSideBubbleMetaData?count=2147483647&north={north}&south={south}&east={east}&west={west}", oncomplete = comp1, cache = True)
             ajax.get (f"https://t.ssl.ak.tiles.virtualearth.net/tiles/cmd/StreetSideBubbleMetaData?count=1&north={north}&south={south}&east={east}&west={west}", oncomplete = comp0, cache = True)
 
         def streetside (bubble):
-            print (bubble)
+            global answer, in_game, start_time
             quadkey, key = "", bubble ["id"]
             while key > 0:
                 quadkey = str (key % 4) + quadkey
                 key //= 4
             quadkey = "0" * (16 - len (quadkey)) + quadkey
-            for i in ("01", "02", "03", "10", "11", "12"):
-                document <= html.IMG (src = f"https://t.ssl.ak.tiles.virtualearth.net/tiles/hs{quadkey}{i}.jpg?g=14834")
+            for i in ("01", "02", "03", "10", "11", "12"): # Faces
+                for j in ("0", "1", "2", "3"): # Tiles (using zoom 19 tiles for now)
+                    document [i + j].attrs ["src"] = f"https://t.ssl.ak.tiles.virtualearth.net/tiles/hs{quadkey}{i}{j}.jpg?g=14834"
+
+            answer = mt.Marker.new ([bubble ["lo"], bubble ["la"]], {
+                "symbol": {
+                    "markerType": "pin",
+                    "markerFill": "lightgreen",
+                    "markerLineColor": "black",
+                    "markerLineWidth": 4,
+                    "markerWidth": 50,
+                    "markerHeight": 50
+                },
+                "visible": False
+            }).addTo (Map.getLayer ("Vector"))
+            interactive (True)
+            start_time = window.Date.new ().getTime ()
+            document ["info"].text = "Guess the location!"
 
 
-        def req (a):
-            global seed
-            seed = a
-            req_location ()
-        window.req = req # DEBUG
+        move_set, inter = set (), None
 
-        scene = three.Scene.new ()
-        camera = three.PerspectiveCamera.new (75, window.innerWidth / window.innerHeight, 0.1, 1000)
-        renderer = three.WebGLRenderer.new ()
-        renderer.setSize (window.innerWidth, window.innerHeight)
+        def get_focus ():
+            return "map" if document ["map"].style.display == "" else "view"
 
-        geometry = three.BoxGeometry.new (1, 1, 1)
-        material = three.MeshBasicMaterial.new ({"color": 0x00ff00})
-        cube = three.Mesh.new (geometry, material)
-        scene.add (cube)
-        document.body <= renderer.domElement
+        def map_move (ev):
+            x, y, z = 0, 0, Map.getZoom ()
+            for i in move_set:
+                x += {"w": 0, "a": 25, "s": 0, "d": -25, "-": 0, "=": 0} [i]
+                y += {"w": 25, "a": 0, "s": -25, "d": 0, "-": 0, "=": 0} [i]
+                z += {"w": 0, "a": 0, "s": 0, "d": 0, "-": -0.5, "=": 0.5} [i]
+            Map.panBy ([x, y], {"duration": -1})
+            Map.setZoom (z, {"animation": False})
+            center_guess (ev)
+        
+        def view_move (ev):
+            rot = document ["camera"].object3D.rotation
+            x, y = rot ["x"], rot ["y"]
+            zoom = document ["camera"].getAttribute ("camera") ["zoom"]
+            for i in move_set:
+                x += {"w": 0.05, "a": 0, "s": -0.05, "d": 0, "-": 0, "=": 0} [i]
+                y += {"w": 0, "a": 0.05, "s": 0, "d": -0.05, "-": 0, "=": 0} [i]
+                zoom *= {"w": 1, "a": 1, "s": 1, "d": 1, "-": 1 / 1.1, "=": 1.1} [i]
+                zoom = min (max (zoom, 0.5), 10)
+            document ["camera"].object3D.rotation.set (x, y, 0)
+            document ["camera"].setAttribute ("camera", "zoom", zoom)
+
+        def move (ev):
+            global inter, in_game
+            focus = get_focus ()
+            if inter:
+                window.clearInterval (inter)
+            if focus == "map":
+                inter = window.setInterval (map_move, 10, ev)
+            else:
+                inter = window.setInterval (view_move, 10, ev)
+
+        def keydown (ev):
+            global guess, answer, in_game
+            if not in_game and ev.key not in ("w", "a", "s", "d", "-", "=", "m"):
+                return
+            focus = get_focus ()
+            if ev.key == "m":
+                for i in (document ["map"], document ["view"]):
+                    i.style.display = {"none": "", "": "none"} [i.style.display]
+                    focus = get_focus ()
+                    document [focus].focus ()
+            elif ev.key in ("w", "a", "s", "d", "-", "="):
+                move_set.add (ev.key)
+                move (ev)
+            elif ev.key == " ":
+                if focus == "view":
+                    return
+                time = (window.Date.new ().getTime () - start_time) / 1000
+                in_game = False
+                answer.show ()
+                def coord_val (marker, axis):
+                    limit = {"x": 180, "y": 90} [axis]
+                    value = marker.getCoordinates () [axis]
+                    return (value + limit) % (2 * limit) - limit # Normalize to [-180, 180] or [-90, 90]
+                extent = mt.Extent.new ([
+                    min (coord_val (guess, "x"), coord_val (answer, "x")),
+                    min (coord_val (guess, "y"), coord_val (answer, "y")),
+                    max (coord_val (guess, "x"), coord_val (answer, "x")),
+                    max (coord_val (guess, "y"), coord_val (answer, "y"))
+                ])
+                guess.setCoordinates ([coord_val (guess, "x"), coord_val (guess, "y")])
+                window.console.log (answer.getCoordinates ())
+                window.console.log (extent)
+                Map.setCenterAndZoom (extent.getCenter (), 2)
+                Map.fitExtent (extent, 0)
+
+                dist = window.haversine ({
+                    "latitude": coord_val (guess, "y"),
+                    "longitude": coord_val (guess, "x")
+                }, {
+                    "latitude": coord_val (answer, "y"),
+                    "longitude": coord_val (answer, "x")
+                })
+                document ["info"].innerHTML = f'Time: {time}s, Distance: {dist}km <a href="?seed={seed}" target="_blank">Share this location!</a>'
+
+        document.bind ("keydown", keydown)
+
+        def keyup (ev):
+            global inter
+            if ev.key in move_set:
+                move_set.remove (ev.key)
+        document.bind ("keyup", keyup)
+
+        def center_guess (ev):
+            global guess, in_game
+            if not in_game:
+                return
+            guess.setCoordinates (Map.getCenter ())
+        Map.on ("moveend", center_guess)
+        Map.on ("zoomend", center_guess)
+
+        def click (ev):
+            global guess, in_game
+            Map.setCenter (ev.coordinate)
+            center_guess (ev)
+        Map.on ("click", click)
+
+        req_location (document.query.getvalue ("seed"))
         
     </script>
+    <div id="site">
+        <p id="info">Loading...</p>
+        <div id="map"></div>
+        <div id="view">
+            <a-scene embedded xr-mode-ui="enabled: false">
+                <a-camera id="camera" position="0 0 0" wasd-controls-enabled="false" look-controls-enabled="false"></a-camera>
+                <a-image position="-0.5 0.5 -1" rotation="0 0 0" id="010" src=""></a-image>
+                <a-image position="0.5 0.5 -1" rotation="0 0 0" id="011" src=""></a-image>
+                <a-image position="-0.5 -0.5 -1" rotation="0 0 0" id="012" src=""></a-image>
+                <a-image position="0.5 -0.5 -1" rotation="0 0 0" id="013" src=""></a-image>
+                <a-image position="1 0.5 -0.5" rotation="0 -90 0" id="020" src=""></a-image>
+                <a-image position="1 0.5 0.5" rotation="0 -90 0" id="021" src=""></a-image>
+                <a-image position="1 -0.5 -0.5" rotation="0 -90 0" id="022" src=""></a-image>
+                <a-image position="1 -0.5 0.5" rotation="0 -90 0" id="023" src=""></a-image>
+                <a-image position="0.5 0.5 1" rotation="0 180 0" id="030" src=""></a-image>
+                <a-image position="-0.5 0.5 1" rotation="0 180 0" id="031" src=""></a-image>
+                <a-image position="0.5 -0.5 1" rotation="0 180 0" id="032" src=""></a-image>
+                <a-image position="-0.5 -0.5 1" rotation="0 180 0" id="033" src=""></a-image>
+                <a-image position="-1 0.5 0.5" rotation="0 90 0" id="100" src=""></a-image>
+                <a-image position="-1 0.5 -0.5" rotation="0 90 0" id="101" src=""></a-image>
+                <a-image position="-1 -0.5 0.5" rotation="0 90 0" id="102" src=""></a-image>
+                <a-image position="-1 -0.5 -0.5" rotation="0 90 0" id="103" src=""></a-image>
+                <a-image position="-0.5 1 0.5" rotation="90 0 0" id="110" src=""></a-image>
+                <a-image position="0.5 1 0.5" rotation="90 0 0" id="111" src=""></a-image>
+                <a-image position="-0.5 1 -0.5" rotation="90 0 0" id="112" src=""></a-image>
+                <a-image position="0.5 1 -0.5" rotation="90 0 0" id="113" src=""></a-image>
+                <a-image position="-0.5 -1 -0.5" rotation="-90 0 0" id="120" src=""></a-image>
+                <a-image position="0.5 -1 -0.5" rotation="-90 0 0" id="121" src=""></a-image>
+                <a-image position="-0.5 -1 0.5" rotation="-90 0 0" id="122" src=""></a-image>
+                <a-image position="0.5 -1 0.5" rotation="-90 0 0" id="123" src=""></a-image>
+            </a-scene>
+        </div>
+    </div>
 </body>
 </html>
