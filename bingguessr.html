@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <title>GPX Visualizer</title>
+    <title>bingguessr</title>
     <meta charset="utf-8">
     <script src="https://cdn.jsdelivr.net/npm/brython@3/brython.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/brython@3/brython_stdlib.min.js"></script>
@@ -266,7 +266,7 @@
                     "latitude": coord_val (answer, "y"),
                     "longitude": coord_val (answer, "x")
                 })
-                document ["info"].innerHTML = f'Time: {time}s, Distance: {dist}km <a href="?seed={seed}" target="_blank">Share this location!</a>'
+                document ["info"].innerHTML = f'Time: {time}s, Distance: {dist:.3f}km <a href="?seed={seed}" target="_blank">Share this location!</a>'
 
         document.bind ("keydown", keydown)
 
