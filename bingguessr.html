@@ -203,7 +203,7 @@
             for i in move_set:
                 x += {"w": 0, "a": 25, "s": 0, "d": -25, "-": 0, "=": 0} [i]
                 y += {"w": 25, "a": 0, "s": -25, "d": 0, "-": 0, "=": 0} [i]
-                z += {"w": 0, "a": 0, "s": 0, "d": 0, "-": -0.5, "=": 0.5} [i]
+                z += {"w": 0, "a": 0, "s": 0, "d": 0, "-": -0.25, "=": 0.25} [i]
             Map.panBy ([x, y], {"duration": -1})
             Map.setZoom (z, {"animation": False})
             center_guess (ev)
