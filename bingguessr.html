@@ -24,7 +24,7 @@
         }
         p:not(.maptalks-layer-switcher, .maptalks-layer-switcher *) {
             font-family: Arial, sans-serif;
-            font-size: 28px;
+            font-size: 20px;
             margin: 5px;
             padding: 5px 7px;
             text-decoration: none;
@@ -105,6 +105,10 @@
 
         def interactive (toggle):
             global in_game
+            if toggle:
+                document.bind ("keydown", keydown)
+            else:
+                document.unbind ("keydown")
             Map.setOptions ({
                 "draggable": toggle,
                 "dragPan": toggle,
@@ -125,9 +129,12 @@
 
         def req_location (s = None):
             global seed, h
+            if s is None:
+                document ["info"].text = "Finding a random location..."
+            else:
+                document ["info"].text = "Loading location..."
             seed = s if s is not None else format (random.randint (0, 16 ** 32 - 1), "0>16x")
             h = binhash ()
-            document ["info"].text = "Finding a random location..."
 
             south, west = 5.625 * int (h [ : 5], 2) - 90, 5.625 * int (h [5 : 11], 2) - 180
             north, east = south + 5.625, west + 5.625
@@ -184,8 +191,7 @@
             }).addTo (Map.getLayer ("Vector"))
             interactive (True)
             start_time = window.Date.new ().getTime ()
-            document ["info"].text = "Guess the location!"
-
+            document ["info"].text = 'Guess the location! WASD or click on map to move, "-" & "=" to zoom, "m" to switch between 3D and map view, Space to submit your guess.'
 
         move_set, inter = set (), None
 
@@ -207,9 +213,9 @@
             x, y = rot ["x"], rot ["y"]
             zoom = document ["camera"].getAttribute ("camera") ["zoom"]
             for i in move_set:
-                x += {"w": 0.05, "a": 0, "s": -0.05, "d": 0, "-": 0, "=": 0} [i]
-                y += {"w": 0, "a": 0.05, "s": 0, "d": -0.05, "-": 0, "=": 0} [i]
-                zoom *= {"w": 1, "a": 1, "s": 1, "d": 1, "-": 1 / 1.1, "=": 1.1} [i]
+                x += {"w": 0.025, "a": 0, "s": -0.025, "d": 0, "-": 0, "=": 0} [i]
+                y += {"w": 0, "a": 0.025, "s": 0, "d": -0.025, "-": 0, "=": 0} [i]
+                zoom *= {"w": 1, "a": 1, "s": 1, "d": 1, "-": 1 / 1.05, "=": 1.05} [i]
                 zoom = min (max (zoom, 0.5), 10)
             document ["camera"].object3D.rotation.set (x, y, 0)
             document ["camera"].setAttribute ("camera", "zoom", zoom)
@@ -220,20 +226,18 @@
             if inter:
                 window.clearInterval (inter)
             if focus == "map":
-                inter = window.setInterval (map_move, 10, ev)
+                inter = window.setInterval (map_move, 5, ev)
             else:
-                inter = window.setInterval (view_move, 10, ev)
+                inter = window.setInterval (view_move, 5, ev)
 
         def keydown (ev):
             global guess, answer, in_game
-            if not in_game and ev.key not in ("w", "a", "s", "d", "-", "=", "m"):
+            if not in_game and ev.key not in ("w", "a", "s", "d", "-", "=", "m", "r"):
                 return
             focus = get_focus ()
             if ev.key == "m":
                 for i in (document ["map"], document ["view"]):
                     i.style.display = {"none": "", "": "none"} [i.style.display]
-                    focus = get_focus ()
-                    document [focus].focus ()
             elif ev.key in ("w", "a", "s", "d", "-", "="):
                 move_set.add (ev.key)
                 move (ev)
@@ -266,15 +270,35 @@
                     "latitude": coord_val (answer, "y"),
                     "longitude": coord_val (answer, "x")
                 })
-                document ["info"].innerHTML = f'Time: {time}s, Distance: {dist:.3f}km <a href="?seed={seed}" target="_blank">Share this location!</a>'
+                document ["info"].innerHTML = f'Time: {time}s, Distance: {dist:.3f}km <a href="?seed={seed}" target="_blank">Share this location!</a> "r" to play again.'
+            elif ev.key == "r":
+                if in_game:
+                    return
+                interactive (False)
+    
+                for i in document.select ("a-image"):
+                    i.attrs ["src"] = ""
+                document ["camera"].object3D.rotation.set (0, 0, 0)
+                document ["camera"].setAttribute ("camera", "zoom", 1)
+                Map.setCenterAndZoom ([0, 0], 2)
+                guess.setCoordinates ([0, 0])
 
-        document.bind ("keydown", keydown)
+                document ["map"].style.display = "none"
+                document ["view"].style.display = ""
+                answer.remove ()
+                req_location ()
 
         def keyup (ev):
-            global inter
+            global inter, move_set
             if ev.key in move_set:
                 move_set.remove (ev.key)
         document.bind ("keyup", keyup)
+        def mouseleave (ev):
+            global inter, move_set
+            if inter:
+                window.clearInterval (inter)
+            move_set = set ()
+        document.bind ("mouseleave", mouseleave)
 
         def center_guess (ev):
             global guess, in_game
