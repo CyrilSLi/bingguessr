@@ -243,6 +243,8 @@
                 move (ev)
             elif ev.key == " ":
                 if focus == "view":
+                    for i in (document ["map"], document ["view"]):
+                        i.style.display = {"none": "", "": "none"} [i.style.display]
                     return
                 time = (window.Date.new ().getTime () - start_time) / 1000
                 in_game = False
